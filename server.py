@@ -1,19 +1,34 @@
-import os
-import http.server
-import socketserver
+from flask import Flask, request, send_file, jsonify
+from pytube import YouTube
+import tempfile
 
-from http import HTTPStatus
-
-
-class Handler(http.server.SimpleHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(HTTPStatus.OK)
-        self.end_headers()
-        msg = 'Hello! you requested %s' % (self.path)
-        self.wfile.write(msg.encode())
+app = Flask("__name__")
 
 
-port = int(os.getenv('PORT', 80))
-print('Listening on port %s' % (port))
-httpd = socketserver.TCPServer(('', port), Handler)
-httpd.serve_forever()
+@app.route("/mp4/<video>", methods=['GET'])
+def mp4(video):
+    if request.method == "GET":
+        url = f'https://www.youtube.com/watch?v={video}'
+        yt = YouTube(url)
+        streams = yt.streams.filter(progressive=True).get_lowest_resolution()
+        title = yt.title + '.mp4'
+        file = tempfile.NamedTemporaryFile(prefix="tmp_", delete=False)
+        streams.download(filename=file.name, timeout=80)
+        return send_file(file.name, as_attachment=True, download_name=title)
+
+
+@app.route("/mp3/<video>", methods=["GET"])
+def mp3(video):
+    if request.method == "GET":
+        url = f'https://www.youtube.com/watch?v={video}'
+        yt = YouTube(url)
+        streams = yt.streams.filter(only_audio=True).order_by('abr')
+        stream = streams[-1]
+        title = streams[-1].title + '.mp3'
+        file = tempfile.NamedTemporaryFile(prefix="tmp_", delete=False)
+        stream.download(filename=file.name, timeout=80)
+        return send_file(file.name, as_attachment=True, download_name=title)
+
+
+if __name__ == "__main__":
+    app.run(host='0.0.0.0', port='5500', debug=True)
